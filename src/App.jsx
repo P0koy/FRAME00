@@ -1,177 +1,106 @@
-/*
-Pinned subject: FRAME99, a Russian-language cultural rating platform for film, series, and anime.
-Audience: thoughtful viewers who want to explain a score, not merely drop a star rating.
-Single job: make the reason behind a personal 1–99 score instantly legible.
-Design plan: archival film contact sheet meets editorial colophon. Type: Arial Black for display numerals, system grotesk for UI, Georgia italic for human voice. Palette: ink #080808, paper #F1EFE8, graphite #1A1A1A, ash #9B9B96, signal #D8FF3E. Layout: full-bleed score ledger with offset poster columns. Signature: oversized score numerals crossed by a fluorescent calibration line.
-*/
-import { useMemo, useState } from "react";
-import { Search, ArrowRight, Heart, X, ChevronDown, Check, Menu, UserRound, Plus } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger, Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Toaster, toast } from "./ui.jsx";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowRight, Check, ChevronDown, Heart, Menu, Plus, Search, UserRound, X } from "lucide-react";
+import { supabase } from "./lib/supabase.js";
 import "./styles.css";
 
-const works = [
-  { id: 1, title: "ДЮНА", original: "Dune", year: 2021, type: "Фильм", score: 84, user: "noirframe", note: "Редкий блокбастер, где масштаб не съедает тишину.", poster: "dune", meta: "США · 155 мин · Дени Вильнёв", count: "12 481", ratings: [6,13,24,45,80,142,310,522,688,401] },
-  { id: 2, title: "ИДЕАЛЬНАЯ ГРУСТЬ", original: "Perfect Blue", year: 1997, type: "Аниме", score: 91, user: "miro", note: "Монтаж превращает сомнение в физическое пространство.", poster: "blue", meta: "Япония · 81 мин · Сатоси Кон", count: "8 904" },
-  { id: 3, title: "РАЗДЕЛЕНИЕ", original: "Severance", year: 2022, type: "Сериал", score: 88, user: "sector7", note: "Форма офиса становится главным антагонистом.", poster: "severance", meta: "США · 2 сезона · продолжается", count: "10 317" },
-  { id: 4, title: "ПРОШЛЫЕ ЖИЗНИ", original: "Past Lives", year: 2023, type: "Фильм", score: 77, user: "mari.a", note: "Очень точная история о жизни, которой не случилось.", poster: "lives", meta: "США · 106 мин · Селин Сон", count: "5 266" },
+const DEMO_WORKS = [
+  { id: "demo-1", title: "ДЮНА", original_title: "Dune", release_year: 2021, media_type: "film", poster_url: "", country: "США", director: "Дени Вильнёв", duration_minutes: 155, score: 84, count: 12481, description: "Монументальная научно-фантастическая история о власти, вере, наследии и цене пророчества." },
+  { id: "demo-2", title: "ИДЕАЛЬНАЯ ГРУСТЬ", original_title: "Perfect Blue", release_year: 1997, media_type: "anime", poster_url: "", country: "Япония", director: "Сатоси Кон", duration_minutes: 81, score: 91, count: 8904, description: "Психологический триллер, в котором монтаж превращает сомнение в физическое пространство." },
+  { id: "demo-3", title: "РАЗДЕЛЕНИЕ", original_title: "Severance", release_year: 2022, media_type: "series", poster_url: "", country: "США", seasons: 2, score: 88, count: 10317, description: "История о людях, чьи рабочие и личные воспоминания разделены радикальной процедурой." },
+  { id: "demo-4", title: "ПРОШЛЫЕ ЖИЗНИ", original_title: "Past Lives", release_year: 2023, media_type: "film", poster_url: "", country: "США", director: "Селин Сон", duration_minutes: 106, score: 77, count: 5266, description: "История о близости, времени и жизни, которая могла случиться иначе." },
 ];
 
 const criteria = [
-  { key: "content", short: "МАТЕРИАЛ", title: "МАТЕРИАЛ / СОДЕРЖАНИЕ", text: "Насколько последовательно и содержательно произведение работает со своим материалом." },
-  { key: "composition", short: "КОМПОЗИЦИЯ", title: "КОМПОЗИЦИЯ / ТЕМП", text: "Как структура, ритм и длительность служат задаче произведения." },
-  { key: "execution", short: "РЕАЛИЗАЦИЯ", title: "РЕАЛИЗАЦИЯ / ТЕХНИКА", text: "Насколько профессионально замысел воплощён выбранными средствами." },
-  { key: "integrity", short: "ЦЕЛОСТНОСТЬ", title: "ЦЕЛОСТНОСТЬ / АВТОРСКИЙ ЯЗЫК", text: "Насколько форма, содержание, тон и художественные решения работают как единое целое." },
+  { key: "content_score", short: "МАТЕРИАЛ", title: "МАТЕРИАЛ / СОДЕРЖАНИЕ", text: "Насколько последовательно и содержательно произведение работает со своим материалом." },
+  { key: "composition_score", short: "КОМПОЗИЦИЯ", title: "КОМПОЗИЦИЯ / ТЕМП", text: "Как структура, ритм и длительность служат задаче произведения." },
+  { key: "execution_score", short: "РЕАЛИЗАЦИЯ", title: "РЕАЛИЗАЦИЯ / ТЕХНИКА", text: "Насколько профессионально замысел воплощён выбранными средствами." },
+  { key: "integrity_score", short: "ЦЕЛОСТНОСТЬ", title: "ЦЕЛОСТНОСТЬ / АВТОРСКИЙ ЯЗЫК", text: "Насколько форма, содержание, тон и художественные решения работают как единое целое." },
 ];
 
 const levels = ["критически слабо", "очень слабо", "слабо", "ниже среднего", "средний уровень", "выше среднего", "сильно", "очень сильно", "выдающийся уровень", "почти эталонно"];
-const multiplier = (impression) => 1 + ((impression - 1) * 1.475) / 9;
-const finalScore = (scores, impression) => Math.round(Object.values(scores).reduce((a,b)=>a+b,0) * multiplier(impression));
+const typeLabels = { film: "Фильм", series: "Сериал", anime: "Аниме" };
+const posterKinds = ["dune", "blue", "severance", "lives"];
+const multiplier = impression => 1 + ((impression - 1) * 1.475) / 9;
+const finalScore = (scores, impression) => Math.round(Object.values(scores).reduce((a, b) => a + b, 0) * multiplier(impression));
+const mediaTypeLabel = type => typeLabels[type] || type || "Произведение";
+const initials = name => (name || "U").trim().slice(0, 1).toUpperCase() || "U";
 
-function Logo({ onClick }) {
-  return <button className="logo" onClick={onClick} aria-label="На главную">FRAME<span>99</span></button>;
+function Poster({ kind = "dune", compact = false, src = "" }) {
+  if (src) return <img className={`poster-image ${compact ? "compact" : ""}`} src={src} alt="Постер" loading="lazy" />;
+  return <div className={`poster ${posterKinds.includes(kind) ? kind : "dune"} ${compact ? "compact" : ""}`}><span className="poster-index">F.99</span><span className="poster-mark">{kind === "dune" ? "DUNE" : kind === "blue" ? "BLUE" : kind === "severance" ? "SVR" : "PL"}</span></div>;
 }
+function Score({ value, small = false }) { return <div className={`score ${small ? "small" : ""}`}><div><strong>{value ?? "—"}</strong><span>/99</span></div></div>; }
+function Logo({ onClick }) { return <button className="logo" onClick={onClick} aria-label="На главную">FRAME<span>99</span></button>; }
 
-function Header({ page, setPage }) {
+function Header({ setPage, user, onAuth }) {
   const [open, setOpen] = useState(false);
-  return <header className="header">
-    <Logo onClick={()=>setPage("home")} />
-    <nav className={open ? "nav open" : "nav"}>
-      <button onClick={()=>{setPage("catalog");setOpen(false)}}>КАТАЛОГ</button>
-      <button onClick={()=>{setPage("reviews");setOpen(false)}}>РЕЦЕНЗИИ</button>
-      <button onClick={()=>{setPage("method");setOpen(false)}}>МЕТОДИКА</button>
-      <button onClick={()=>{setPage("profile");setOpen(false)}}><UserRound size={17}/> ПРОФИЛЬ</button>
-    </nav>
-    <button className="menu" onClick={()=>setOpen(!open)} aria-label="Меню">{open?<X/>:<Menu/>}</button>
-  </header>
+  const go = page => { setPage(page); setOpen(false); };
+  return <header className="header"><Logo onClick={() => go("home")} /><nav className={open ? "nav open" : "nav"}>
+    <button onClick={() => go("catalog")}>КАТАЛОГ</button><button onClick={() => go("reviews")}>РЕЦЕНЗИИ</button><button onClick={() => go("method")}>МЕТОДИКА</button><button onClick={() => user ? go("profile") : onAuth()}><UserRound size={17} /> {user ? "ПРОФИЛЬ" : "ВОЙТИ"}</button>
+  </nav><button className="menu" onClick={() => setOpen(!open)} aria-label="Меню">{open ? <X /> : <Menu />}</button></header>;
 }
 
-function Poster({ kind, compact=false }) {
-  return <div className={`poster ${kind} ${compact ? "compact" : ""}`} aria-label="Постер">
-    <span className="poster-index">F.99</span>
-    <span className="poster-mark">{kind === "dune" ? "DUNE" : kind === "blue" ? "BLUE" : kind === "severance" ? "SVR" : "PL"}</span>
-  </div>
-}
-
-function Score({ value, label, small=false }) {
-  return <div className={`score ${small ? "small" : ""}`}>
-    <div><strong>{value}</strong><span>/99</span></div>
-    {label && <p>{label}</p>}
-  </div>
-}
-
-function WorkCard({ work, onOpen, feature=false }) {
-  return <article className={`work-card ${feature ? "feature" : ""}`} onClick={()=>onOpen(work)}>
-    <Poster kind={work.poster} compact={!feature}/>
-    <div className="work-copy">
-      <div className="eyebrow">{work.type} · {work.year}</div>
-      <h3>{work.title}</h3>
-      <Score value={work.score} small={!feature}/>
-      <blockquote>«{work.note}»</blockquote>
-      <div className="author">@{work.user} <ArrowRight size={16}/></div>
-    </div>
-  </article>
-}
-
-function SearchBox({ setSelected, setPage }) {
+function SearchBox({ works, setSelected, setPage }) {
   const [term, setTerm] = useState("");
-  const found = term.length > 1 ? works.filter(w => `${w.title} ${w.original} ${w.type}`.toLowerCase().includes(term.toLowerCase())) : [];
-  return <div className="search-wrap">
-    <Search size={26}/><input aria-label="Найти произведение" placeholder="Найти фильм, сериал или аниме..." value={term} onChange={e=>setTerm(e.target.value)}/><span className="search-key">⌘ K</span>
-    {found.length > 0 && <div className="search-results">{found.map(w=><button key={w.id} onClick={()=>{setSelected(w);setPage("work");setTerm("")}}><Poster kind={w.poster} compact/><span><b>{w.title}</b><small>{w.type} · {w.year}</small></span><Score value={w.score} small/></button>)}</div>}
-  </div>
+  const found = useMemo(() => { const q = term.trim().toLowerCase(); return q.length < 2 ? [] : works.filter(w => `${w.title} ${w.original_title || ""} ${mediaTypeLabel(w.media_type)}`.toLowerCase().includes(q)).slice(0, 8); }, [term, works]);
+  return <div className="search-wrap"><Search size={26} /><input aria-label="Найти произведение" placeholder="Найти фильм, сериал или аниме..." value={term} onChange={e => setTerm(e.target.value)} />{found.length > 0 && <div className="search-results">{found.map(w => <button key={w.id} onClick={() => { setSelected(w); setPage("work"); setTerm(""); }}><Poster kind={posterKinds[(w.release_year || 0) % 4]} compact src={w.poster_url} /><span><b>{w.title}</b><small>{mediaTypeLabel(w.media_type)} · {w.release_year || "—"}</small></span><Score value={w.score} small /></button>)}</div>}</div>;
 }
 
-function Home({ setSelected, setPage }) {
-  return <>
-    <section className="hero">
-      <div className="hero-kicker">АРХИВ ЧЕЛОВЕЧЕСКОГО ВОСПРИЯТИЯ</div>
-      <h1>У ЦИФРЫ<br/><i>ЕСТЬ</i> ПРИЧИНА.</h1>
-      <p>Фильмы, сериалы и аниме: разберите по критериям, добавьте личное впечатление, объясните свой итог.</p>
-      <SearchBox setSelected={setSelected} setPage={setPage}/>
-      <div className="calibration"><span>01</span><div/><span>99</span></div>
-    </section>
-    <section className="section-pad">
-      <div className="section-head"><div><span>СЕЙЧАС</span><h2>ПОСЛЕДНЕЕ ОЦЕНЁННОЕ</h2></div><button onClick={()=>setPage("catalog")}>СМОТРЕТЬ ВСЁ <ArrowRight/></button></div>
-      <div className="editorial-grid">
-        <WorkCard work={works[0]} onOpen={(w)=>{setSelected(w);setPage("work")}} feature/>
-        <div className="side-grid">{works.slice(1).map(w=><WorkCard key={w.id} work={w} onOpen={(x)=>{setSelected(x);setPage("work")}}/>)}</div>
-      </div>
-    </section>
-    <section className="manifesto section-pad">
-      <div className="manifesto-num">40 <span>×</span> 2.475 <span>=</span> 99</div>
-      <div><h2>НЕ ИСТИНА.<br/>АРГУМЕНТИРОВАННЫЙ ВЗГЛЯД.</h2><p>Четыре наблюдаемых критерия создают основу. «Общее впечатление» честно добавляет личное. Никаких звёзд и магии среднего арифметического.</p><button onClick={()=>setPage("method")}>КАК РАБОТАЕТ FRAME99 <ArrowRight/></button></div>
-    </section>
-  </>
+function WorkCard({ work, onOpen, feature = false }) {
+  const kind = posterKinds[(work.release_year || 0) % 4] || "dune";
+  return <article className={`work-card ${feature ? "feature" : ""}`} onClick={() => onOpen(work)}><Poster kind={kind} compact={!feature} src={work.poster_url} /><div className="work-copy"><div className="eyebrow">{mediaTypeLabel(work.media_type)} · {work.release_year || "—"}</div><h3>{work.title}</h3><Score value={work.score} small={!feature}/><div className="author">FRAME99 <ArrowRight size={16} /></div></div></article>;
 }
 
-function RatingDialog({ work }) {
-  const initial = { content:8, composition:9, execution:8, integrity:9 };
-  const [scores, setScores] = useState(initial);
-  const [impression, setImpression] = useState(8);
-  const [review, setReview] = useState("");
-  const total = finalScore(scores, impression);
-  const base = Object.values(scores).reduce((a,b)=>a+b,0);
-  const publish = () => toast.success("Оценка сохранена", { description: `${total}/99 · ${work.title}` });
-  return <Dialog>
-    <DialogTrigger asChild><Button className="primary-action">ОЦЕНИТЬ <ArrowRight/></Button></DialogTrigger>
-    <DialogContent className="rating-dialog">
-      <DialogTitle className="dialog-title">ОЦЕНИТЬ: {work.title}</DialogTitle>
-      <DialogDescription className="sr-only">Форма оценки произведения по четырём объективным критериям и общему впечатлению.</DialogDescription>
-      <div className="rating-layout">
-        <div className="rating-aside"><Poster kind={work.poster}/><div className="live-score"><span>ИТОГ</span><Score value={total}/><small>База {base}/40 · ×{multiplier(impression).toFixed(3)}</small></div></div>
-        <div className="rating-form">
-          <div className="part-label">ОБЪЕКТИВНАЯ ЧАСТЬ <span>01</span></div>
-          {criteria.map(c=><div className="criterion" key={c.key}>
-            <div><TooltipProvider><Tooltip><TooltipTrigger asChild><button className="criterion-title">{c.title} <span>?</span></button></TooltipTrigger><TooltipContent>{c.text}</TooltipContent></Tooltip></TooltipProvider><small>{scores[c.key]} · {levels[scores[c.key]-1]}</small></div>
-            <div className="number-row">{[1,2,3,4,5,6,7,8,9,10].map(n=><button key={n} className={scores[c.key]===n?"active":""} onClick={()=>setScores({...scores,[c.key]:n})}>{n}</button>)}</div>
-          </div>)}
-          <div className="subjective">
-            <div className="part-label">СУБЪЕКТИВНАЯ ЧАСТЬ <span>02</span></div>
-            <div className="criterion"><div><b>ОБЩЕЕ ВПЕЧАТЛЕНИЕ</b><small>{impression} · личная сила воздействия</small></div><div className="number-row accent">{[1,2,3,4,5,6,7,8,9,10].map(n=><button key={n} className={impression===n?"active":""} onClick={()=>setImpression(n)}>{n}</button>)}</div></div>
-          </div>
-          <label className="review-field"><span>РЕЦЕНЗИЯ <em>необязательно</em></span><textarea maxLength={10000} value={review} onChange={e=>setReview(e.target.value)} placeholder="Объясните свою оценку..."/><small className={review.length>0&&review.length<50?"warn":""}>{review.length} / 10 000 {review.length>0&&review.length<50?"· ещё минимум 50 символов":""}</small></label>
-          <Button className="publish" onClick={publish} disabled={review.length>0&&review.length<50}>ОПУБЛИКОВАТЬ {total}/99 <Check/></Button>
-        </div>
-      </div>
-    </DialogContent>
-  </Dialog>
+function Home({ works, setSelected, setPage }) {
+  const recent = works.slice(0, 4);
+  return <><section className="hero"><div className="hero-kicker">АРХИВ ЧЕЛОВЕЧЕСКОГО ВОСПРИЯТИЯ</div><h1>У ЦИФРЫ<br /><i>ЕСТЬ</i> ПРИЧИНА.</h1><p>Фильмы, сериалы и аниме: разберите по критериям, добавьте личное впечатление, объясните свой итог.</p><SearchBox works={works} setSelected={setSelected} setPage={setPage} /><div className="calibration"><span>01</span><div /><span>99</span></div></section><section className="section-pad"><div className="section-head"><div><span>СЕЙЧАС</span><h2>ПОСЛЕДНЕЕ ОЦЕНЁННОЕ</h2></div><button onClick={() => setPage("catalog")}>СМОТРЕТЬ ВСЁ <ArrowRight /></button></div><div className="editorial-grid">{recent[0] && <WorkCard work={recent[0]} feature onOpen={w => { setSelected(w); setPage("work"); }} />}<div className="side-grid">{recent.slice(1).map(w => <WorkCard key={w.id} work={w} onOpen={x => { setSelected(x); setPage("work"); }} />)}</div></div></section><section className="manifesto section-pad"><div className="manifesto-num">40 <span>×</span> 2.475 <span>=</span> 99</div><div><h2>НЕ ИСТИНА.<br />АРГУМЕНТИРОВАННЫЙ ВЗГЛЯД.</h2><p>Четыре наблюдаемых критерия создают основу. «Общее впечатление» честно добавляет личное.</p><button onClick={() => setPage("method")}>КАК РАБОТАЕТ FRAME99 <ArrowRight /></button></div></section></>;
 }
 
-function Breakdown({ values={content:8,composition:9,execution:8,integrity:9}, impression=8 }) {
-  const [open,setOpen]=useState(false); const base=Object.values(values).reduce((a,b)=>a+b,0);
-  return <div className="breakdown"><button onClick={()=>setOpen(!open)}>ПОЧЕМУ {Math.round(base*multiplier(impression))}? <ChevronDown className={open?"rotate":""}/></button>{open&&<div className="breakdown-body">{criteria.map(c=><div key={c.key}><span>{c.short}</span><b>{values[c.key]}/10</b></div>)}<div className="formula-row"><span>БАЗА {base}/40</span><span>ВПЕЧАТЛЕНИЕ {impression}/10</span><span>×{multiplier(impression).toFixed(3)}</span></div></div>}</div>
+function MethodPage() {
+  return <main className="method-page section-pad"><div className="method-hero"><span>МЕТОДИКА FRAME99</span><h1>ДВЕ ЧАСТИ.<br />ОДНА ЧЕСТНАЯ ЦИФРА.</h1><p>Не научная истина, а формализованный инструмент критического взгляда.</p></div><div className="method-grid"><div className="method-number">01</div><div><h2>ОБЪЕКТИВНАЯ ОСНОВА</h2><p>Четыре универсальных критерия. Каждый от 1 до 10.</p>{criteria.map(c => <div className="method-criterion" key={c.key}><b>{c.title}</b><span>{c.text}</span></div>)}</div><div className="method-number accent-text">02</div><div><h2>ОБЩЕЕ ВПЕЧАТЛЕНИЕ</h2><p>Личный отклик от 1 до 10 превращается в множитель от ×1.000 до ×2.475.</p></div><div className="method-number">99</div><div><h2>ИТОГ</h2><div className="formula-large">ROUND ( B × [1 + (I−1) × 1.475 / 9] )</div><p>Например: база 34/40, впечатление 8/10, итог 73/99.</p></div></div></main>;
 }
 
-function WorkPage({ work, setPage }) {
-  const [liked,setLiked]=useState(false);
-  return <main>
-    <section className="work-hero">
-      <Poster kind={work.poster}/>
-      <div className="work-info">
-        <div className="eyebrow">{work.type} · {work.year} · {work.meta}</div>
-        <h1>{work.title}</h1><p className="original">{work.original}</p>
-        <p className="synopsis">Будущее, в котором власть, вера и экология сплетаются вокруг самого ценного вещества во вселенной. Монументальная история о наследии, выборе и цене пророчества.</p>
-        <div className="actions"><RatingDialog work={work}/><button className={liked?"icon-action liked":"icon-action"} onClick={()=>setLiked(!liked)}><Heart fill={liked?"currentColor":"none"}/> {liked?"В ЛЮБИМЫХ":"В ЛЮБИМОЕ"}</button></div>
-      </div>
-      <div className="community-score"><span>СРЕДНЯЯ ОЦЕНКА FRAME99</span><Score value={work.score}/><p>{work.count} оценок</p><Breakdown/></div>
-    </section>
-    <section className="distribution section-pad"><div className="section-head"><div><span>СООБЩЕСТВО</span><h2>РАСПРЕДЕЛЕНИЕ ВЗГЛЯДОВ</h2></div></div><div className="histogram">{(work.ratings||[8,16,22,41,74,130,250,420,580,310]).map((n,i)=><div key={i}><span style={{height:`${Math.max(8,n/6)}px`}}/><b>{i+1}</b></div>)}</div><p>Это не вердикт произведению. Это карта того, как его увидели разные люди.</p></section>
-    <section className="section-pad"><div className="section-head"><div><span>ОБЪЯСНЕНИЯ</span><h2>РЕЦЕНЗИИ</h2></div><button>ВСЕ РЕЦЕНЗИИ <ArrowRight/></button></div><div className="review-grid"><ReviewCard name="noirframe" score="84" text="Редкий блокбастер, где масштаб не съедает тишину. Композиция держит медленный ритм уверенно, а звук работает почти как физическая сила."/><ReviewCard name="mari.a" score="76" text="Технически почти безупречно, но дистанция между мной и персонажами так и не исчезла. Именно поэтому впечатление ниже объективной базы."/></div></section>
-  </main>
+function AuthModal({ onClose, onSuccess }) {
+  const [mode, setMode] = useState("login"), [email, setEmail] = useState(""), [password, setPassword] = useState(""), [nickname, setNickname] = useState(""), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
+  const submit = async e => { e.preventDefault(); setBusy(true); setMessage(""); try { if (mode === "signup") { if (nickname.trim().length < 2) throw new Error("Никнейм должен содержать минимум 2 символа."); const { error } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { nickname: nickname.trim() } } }); if (error) throw error; setMessage("Регистрация выполнена. Проверьте почту, если включено подтверждение e-mail."); } else { const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password }); if (error) throw error; onSuccess(); } } catch (err) { setMessage(err.message || "Не удалось выполнить операцию."); } finally { setBusy(false); } };
+  return <div className="app-modal" role="dialog" aria-modal="true"><div className="auth-panel"><button className="modal-close" onClick={onClose}><X /></button><div className="eyebrow">FRAME99</div><h2>{mode === "login" ? "ВОЙТИ" : "СОЗДАТЬ ПРОФИЛЬ"}</h2><form onSubmit={submit}>{mode === "signup" && <input className="dark-input" value={nickname} onChange={e => setNickname(e.target.value)} placeholder="Никнейм" minLength={2} maxLength={40} required />}<input className="dark-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="E-mail" required /><input className="dark-input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Пароль" minLength={6} required /><button className="publish" disabled={busy}>{busy ? "СЕКУНДУ…" : mode === "login" ? "ВОЙТИ" : "ЗАРЕГИСТРИРОВАТЬСЯ"} <ArrowRight /></button></form>{message && <p className="form-message">{message}</p>}<button className="auth-switch" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setMessage(""); }}>{mode === "login" ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}</button></div></div>;
 }
 
-function ReviewCard({name,score,text}) { const [like,setLike]=useState(false); return <article className="review-card"><div className="review-top"><div className="avatar">{name[0].toUpperCase()}</div><div><b>@{name}</b><small>12 сентября 2026</small></div><Score value={score} small/></div><p>«{text}»</p><div className="review-bottom"><Breakdown/><button onClick={()=>setLike(!like)} className={like?"liked":""}><Heart fill={like?"currentColor":"none"}/> {like?13:12}</button></div></article> }
+function RatingModal({ work, user, existing, onClose, onSaved }) {
+  const [scores, setScores] = useState({ content_score: 8, composition_score: 8, execution_score: 8, integrity_score: 8 }), [impression, setImpression] = useState(8), [review, setReview] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const total = finalScore(scores, impression), base = Object.values(scores).reduce((a, b) => a + b, 0);
+  const submit = async () => { if (existing) return; if (review.length > 0 && review.length < 50) return setError("Рецензия должна содержать минимум 50 символов."); setBusy(true); setError(""); try { const { data: rating, error: ratingErr } = await supabase.from("ratings").insert({ user_id: user.id, media_id: work.id, ...scores, impression_score: impression }).select().single(); if (ratingErr) throw ratingErr; if (review.trim()) { const { error: reviewErr } = await supabase.from("reviews").insert({ rating_id: rating.id, user_id: user.id, media_id: work.id, body: review.trim() }); if (reviewErr) throw reviewErr; } onSaved(rating); onClose(); } catch (err) { setError(err.message || "Не удалось сохранить оценку."); } finally { setBusy(false); } };
+  return <div className="app-modal" role="dialog" aria-modal="true"><div className="rating-modal"><button className="modal-close" onClick={onClose}><X /></button><div className="dialog-title">ОЦЕНИТЬ: {work.title}</div><div className="rating-layout"><div className="rating-aside"><Poster kind={posterKinds[(work.release_year || 0) % 4]} src={work.poster_url} /><div className="live-score"><span>ИТОГ</span><Score value={total} /><small>База {base}/40 · ×{multiplier(impression).toFixed(3)}</small></div></div><div className="rating-form"><div className="part-label">ОБЪЕКТИВНАЯ ЧАСТЬ <span>01</span></div>{criteria.map(c => <div className="criterion" key={c.key}><div><b>{c.title}</b><small>{scores[c.key]} · {levels[scores[c.key] - 1]}</small></div><div className="number-row">{[1,2,3,4,5,6,7,8,9,10].map(n => <button type="button" key={n} className={scores[c.key] === n ? "active" : ""} onClick={() => setScores(s => ({ ...s, [c.key]: n }))}>{n}</button>)}</div></div>)}<div className="subjective"><div className="part-label">СУБЪЕКТИВНАЯ ЧАСТЬ <span>02</span></div><div className="criterion"><div><b>ОБЩЕЕ ВПЕЧАТЛЕНИЕ</b><small>{impression} · личная сила воздействия</small></div><div className="number-row accent">{[1,2,3,4,5,6,7,8,9,10].map(n => <button type="button" key={n} className={impression === n ? "active" : ""} onClick={() => setImpression(n)}>{n}</button>)}</div></div></div><label className="review-field"><span>РЕЦЕНЗИЯ <em>необязательно</em></span><textarea maxLength={10000} value={review} onChange={e => setReview(e.target.value)} placeholder="Объясните свою оценку..." /><small>{review.length} / 10 000</small></label>{existing ? <p className="form-message">Вы уже оценивали это произведение. Повторная оценка недоступна.</p> : <button className="publish" disabled={busy} onClick={submit}>{busy ? "СОХРАНЕНИЕ…" : `ОПУБЛИКОВАТЬ ${total}/99`} <Check /></button>}{error && <p className="form-message">{error}</p>}</div></div></div></div>;
+}
 
-function MethodPage() { return <main className="method-page section-pad"><div className="method-hero"><span>МЕТОДИКА FRAME99</span><h1>ДВЕ ЧАСТИ.<br/>ОДНА ЧЕСТНАЯ ЦИФРА.</h1><p>Не научная истина, а формализованный инструмент критического взгляда.</p></div><div className="method-grid"><div className="method-number">01</div><div><h2>ОБЪЕКТИВНАЯ ОСНОВА</h2><p>Четыре универсальных критерия. Каждый от 1 до 10. Мы оцениваем, насколько хорошо произведение делает то, что пытается сделать.</p>{criteria.map(c=><div className="method-criterion" key={c.key}><b>{c.title}</b><span>{c.text}</span></div>)}</div><div className="method-number accent-text">02</div><div><h2>ОБЩЕЕ ВПЕЧАТЛЕНИЕ</h2><p>Личный отклик от 1 до 10 превращается в множитель от ×1.000 до ×2.475. Субъективность не прячется, она получает отдельное место.</p></div><div className="method-number">99</div><div><h2>ИТОГ</h2><div className="formula-large">ROUND ( B × [1 + (I−1) × 1.475 / 9] )</div><p>Например: база 34/40, впечатление 8/10, множитель ×2.147. Итог: <strong>73/99</strong>.</p></div></div></main> }
+function Breakdown({ values, impression, value }) { const [open, setOpen] = useState(false); const base = Object.values(values || {}).reduce((a, b) => a + b, 0); return <div className="breakdown"><button onClick={() => setOpen(!open)}>ПОЧЕМУ {value}? <ChevronDown className={open ? "rotate" : ""} /></button>{open && <div className="breakdown-body">{criteria.map(c => <div key={c.key}><span>{c.short}</span><b>{values?.[c.key] || "—"}/10</b></div>)}<div className="formula-row"><span>БАЗА {base}/40</span><span>ВПЕЧАТЛЕНИЕ {impression || "—"}/10</span><span>×{impression ? multiplier(impression).toFixed(3) : "—"}</span></div></div>}</div>; }
 
-function Catalog({setSelected,setPage}) { const [filter,setFilter]=useState("Все"); const shown=filter==="Все"?works:works.filter(w=>w.type===filter); return <main className="catalog section-pad"><div className="catalog-head"><span>АРХИВ</span><h1>НАЙТИ СЛЕДУЮЩЕЕ.</h1><SearchBox setSelected={setSelected} setPage={setPage}/></div><div className="filter-row">{["Все","Фильм","Сериал","Аниме"].map(x=><button key={x} className={filter===x?"active":""} onClick={()=>setFilter(x)}>{x}</button>)}</div><div className="catalog-grid">{shown.map(w=><WorkCard key={w.id} work={w} onOpen={x=>{setSelected(x);setPage("work")}}/>)}</div></main> }
+function ReviewCard({ review }) { const [like, setLike] = useState(false); const author = review.profiles?.nickname || "пользователь"; return <article className="review-card"><div className="review-top"><div className="avatar">{initials(author)}</div><div><b>@{author}</b><small>{new Date(review.created_at).toLocaleDateString("ru-RU")}</small></div></div><p>«{review.body}»</p><div className="review-bottom"><button onClick={() => setLike(!like)} className={like ? "liked" : ""}><Heart fill={like ? "currentColor" : "none"} /> {like ? 1 : 0}</button></div></article>; }
 
-function Profile({setSelected,setPage}) { return <main><section className="profile-hero section-pad"><div className="avatar big">P</div><div><span>КУЛЬТУРНЫЙ ПРОФИЛЬ</span><h1>POKOLOKO</h1><p>Смотрю медленно. Люблю кино, которое продолжает работать после титров.</p></div><div className="profile-stats"><div><b>47</b><span>ОЦЕНОК</span></div><div><b>18</b><span>РЕЦЕНЗИЙ</span></div><div><b>12</b><span>ЛЮБИМЫХ</span></div></div></section><section className="section-pad"><div className="section-head"><div><span>ВКУС В ДВИЖЕНИИ</span><h2>ПОСЛЕДНИЕ ОЦЕНКИ</h2></div></div><div className="catalog-grid">{works.slice(0,3).map(w=><WorkCard key={w.id} work={w} onOpen={x=>{setSelected(x);setPage("work")}}/>)}</div></section></main> }
+function WorkPage({ work, user, setPage, onRequireAuth, onRatingSaved }) {
+  const [liked, setLiked] = useState(false), [rating, setRating] = useState(null), [reviews, setReviews] = useState([]), [showRating, setShowRating] = useState(false), [loading, setLoading] = useState(true);
+  useEffect(() => { let mounted = true; const load = async () => { if (String(work.id).startsWith("demo-")) { if (mounted) setLoading(false); return; } const [{ data: rs }, { data: rv }, { data: fav }] = await Promise.all([supabase.from("ratings").select("*").eq("media_id", work.id), supabase.from("reviews").select("*, profiles(nickname,avatar_url)").eq("media_id", work.id).order("created_at", { ascending: false }).limit(12), user ? supabase.from("favorites").select("media_id").eq("media_id", work.id).eq("user_id", user.id).maybeSingle() : Promise.resolve({ data: null })]); if (!mounted) return; setRating(user ? (rs || []).find(x => x.user_id === user.id) || null : null); setReviews(rv || []); setLiked(Boolean(fav)); setLoading(false); }; load(); return () => { mounted = false; }; }, [work.id, user?.id]);
+  const toggleFavorite = async () => { if (!user) return onRequireAuth(); if (String(work.id).startsWith("demo-")) return; if (liked) await supabase.from("favorites").delete().eq("user_id", user.id).eq("media_id", work.id); else await supabase.from("favorites").insert({ user_id: user.id, media_id: work.id }); setLiked(!liked); };
+  const average = String(work.id).startsWith("demo-") ? work.score : work.score;
+  return <main><section className="work-hero"><Poster kind={posterKinds[(work.release_year || 0) % 4]} src={work.poster_url} /><div className="work-info"><div className="eyebrow">{mediaTypeLabel(work.media_type)} · {work.release_year || "—"} · {[work.country, work.duration_minutes ? `${work.duration_minutes} мин` : null, work.director].filter(Boolean).join(" · ")}</div><h1>{work.title}</h1><p className="original">{work.original_title || ""}</p><p className="synopsis">{work.description || "Произведение в архиве FRAME99."}</p><div className="actions"><button className="primary-action" onClick={() => String(work.id).startsWith("demo-") ? onRequireAuth() : user ? setShowRating(true) : onRequireAuth()}>ОЦЕНИТЬ <ArrowRight /></button><button className={liked ? "icon-action liked" : "icon-action"} onClick={toggleFavorite}><Heart fill={liked ? "currentColor" : "none"} /> {liked ? "В ЛЮБИМЫХ" : "В ЛЮБИМОЕ"}</button>{user && <button className="icon-action" onClick={() => setPage("profile")}>МОЙ ПРОФИЛЬ</button>}</div></div><div className="community-score"><span>СРЕДНЯЯ ОЦЕНКА FRAME99</span><Score value={average} /><p>{work.count ? `${work.count.toLocaleString("ru-RU")} оценок` : loading ? "Загрузка…" : ""}</p>{rating && <><p className="form-message">Твоя оценка: {rating.final_score}/99</p><Breakdown values={rating} impression={rating.impression_score} value={rating.final_score} /></>}</div></section><section className="section-pad"><div className="section-head"><div><span>ОБЪЯСНЕНИЯ</span><h2>РЕЦЕНЗИИ</h2></div></div>{reviews.length ? <div className="review-grid">{reviews.map(r => <ReviewCard key={r.id} review={r} />)}</div> : <div className="empty-state">Пока нет публичных рецензий. Будь первым, кто объяснит свой взгляд.</div>}</section>{showRating && <RatingModal work={work} user={user} existing={rating} onClose={() => setShowRating(false)} onSaved={r => { setRating(r); onRatingSaved?.(); }} />}</main>;
+}
 
-function Placeholder({title}) { return <main className="placeholder section-pad"><span>FRAME99</span><h1>{title}</h1><p>Этот раздел заложен в продуктовую архитектуру MVP.</p></main> }
+function Catalog({ works, setSelected, setPage, user, onAdd }) { const [filter, setFilter] = useState("Все"), [q, setQ] = useState(""); const shown = useMemo(() => works.filter(w => (filter === "Все" || mediaTypeLabel(w.media_type) === filter) && `${w.title} ${w.original_title || ""}`.toLowerCase().includes(q.toLowerCase())), [works, filter, q]); return <main className="catalog section-pad"><div className="catalog-head"><span>АРХИВ</span><h1>НАЙТИ СЛЕДУЮЩЕЕ.</h1><div className="catalog-tools"><SearchBox works={works} setSelected={setSelected} setPage={setPage} />{user && <button className="icon-action" onClick={onAdd}><Plus size={17} /> ДОБАВИТЬ</button>}</div></div><div className="filter-row">{["Все", "Фильм", "Сериал", "Аниме"].map(x => <button key={x} className={filter === x ? "active" : ""} onClick={() => setFilter(x)}>{x}</button>)}</div><input className="catalog-filter" placeholder="Быстрый поиск в каталоге" value={q} onChange={e => setQ(e.target.value)} /><div className="catalog-grid">{shown.map(w => <WorkCard key={w.id} work={w} onOpen={x => { setSelected(x); setPage("work"); }} />)}</div>{!shown.length && <div className="empty-state">Ничего не найдено.</div>}</main>; }
+
+function AddMediaModal({ user, onClose, onSaved }) { const [title, setTitle] = useState(""), [original, setOriginal] = useState(""), [type, setType] = useState("film"), [year, setYear] = useState(""), [description, setDescription] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""); const submit = async e => { e.preventDefault(); setBusy(true); setError(""); try { const { data, error: err } = await supabase.from("media").insert({ title: title.trim(), original_title: original.trim() || null, media_type: type, release_year: year ? Number(year) : null, description: description.trim() || null, created_by: user.id }).select().single(); if (err) throw err; onSaved(data); onClose(); } catch (err) { setError(err.message || "Не удалось добавить произведение."); } finally { setBusy(false); } }; return <div className="app-modal"><div className="auth-panel"><button className="modal-close" onClick={onClose}><X /></button><div className="eyebrow">НОВАЯ ЗАПИСЬ</div><h2>ДОБАВИТЬ ПРОИЗВЕДЕНИЕ</h2><form onSubmit={submit}><input className="dark-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="Название" required /><input className="dark-input" value={original} onChange={e => setOriginal(e.target.value)} placeholder="Оригинальное название" /><div className="form-row"><select className="dark-input" value={type} onChange={e => setType(e.target.value)}><option value="film">Фильм</option><option value="series">Сериал</option><option value="anime">Аниме</option></select><input className="dark-input" type="number" min="1888" max="2100" value={year} onChange={e => setYear(e.target.value)} placeholder="Год" /></div><textarea className="dark-input" value={description} onChange={e => setDescription(e.target.value)} placeholder="Описание" /><button className="publish" disabled={busy}>{busy ? "СОЗДАНИЕ…" : "ДОБАВИТЬ"} <Plus /></button></form>{error && <p className="form-message">{error}</p>}</div></div>; }
+
+function Profile({ user, profile, ratings, favorites, setSelected, setPage, onSignOut }) { const nickname = profile?.nickname || user.email?.split("@")[0] || "USER"; return <main><section className="profile-hero section-pad"><div className="avatar big">{initials(nickname)}</div><div><span>КУЛЬТУРНЫЙ ПРОФИЛЬ</span><h1>{nickname.toUpperCase()}</h1><p>{profile?.bio || "Расскажите миру, что продолжает работать после титров."}</p><button className="icon-action" onClick={onSignOut}>ВЫЙТИ</button></div><div className="profile-stats"><div><b>{ratings.length}</b><span>ОЦЕНОК</span></div><div><b>{favorites.length}</b><span>ЛЮБИМЫХ</span></div></div></section><section className="section-pad"><div className="section-head"><div><span>ВКУС В ДВИЖЕНИИ</span><h2>ПОСЛЕДНИЕ ОЦЕНКИ</h2></div></div>{ratings.length ? <div className="catalog-grid">{ratings.map(r => <WorkCard key={r.id} work={r.media} onOpen={x => { setSelected(x); setPage("work"); }} />)}</div> : <div className="empty-state">Здесь появятся твои оценки.</div>}</section></main>; }
+function ReviewsPage({ reviews }) { return <main className="section-pad"><div className="catalog-head"><span>СООБЩЕСТВО</span><h1>РЕЦЕНЗИИ.</h1></div>{reviews.length ? <div className="review-grid">{reviews.map(r => <ReviewCard key={r.id} review={r} />)}</div> : <div className="empty-state">Пока нет рецензий.</div>}</main>; }
 
 export default function App() {
-  const [page,setPage]=useState("home"); const [selected,setSelected]=useState(works[0]);
-  const body = page==="home"?<Home setSelected={setSelected} setPage={setPage}/>:page==="work"?<WorkPage work={selected} setPage={setPage}/>:page==="method"?<MethodPage/>:page==="catalog"?<Catalog setSelected={setSelected} setPage={setPage}/>:page==="profile"?<Profile setSelected={setSelected} setPage={setPage}/>:<Placeholder title="РЕЦЕНЗИИ"/>;
-  return <TooltipProvider><div className="app"><Header page={page} setPage={setPage}/>{body}<footer><Logo onClick={()=>setPage("home")}/><p>Система, в которой у цифры есть причина.</p><span>FRAME99 · 2026</span></footer><Toaster position="bottom-right"/></div></TooltipProvider>
+  const [page, setPage] = useState("home"), [selected, setSelected] = useState(DEMO_WORKS[0]), [user, setUser] = useState(null), [profile, setProfile] = useState(null), [works, setWorks] = useState(DEMO_WORKS), [reviews, setReviews] = useState([]), [ratings, setRatings] = useState([]), [favorites, setFavorites] = useState([]), [authOpen, setAuthOpen] = useState(false), [addOpen, setAddOpen] = useState(false), [loading, setLoading] = useState(true), [notice, setNotice] = useState("");
+  const reloadUserData = async current => { if (!current) return; const [{ data: p }, { data: rs }, { data: fs }] = await Promise.all([supabase.from("profiles").select("*").eq("id", current.id).maybeSingle(), supabase.from("ratings").select("*, media(*)").eq("user_id", current.id).order("created_at", { ascending: false }), supabase.from("favorites").select("*, media(*)").eq("user_id", current.id)]); setProfile(p); setRatings(rs || []); setFavorites(fs || []); };
+  const loadWorks = async () => { const { data, error } = await supabase.from("media").select("*").order("created_at", { ascending: false }).limit(200); if (!error && data?.length) { const ids = data.map(x => x.id); const { data: rows } = await supabase.from("ratings").select("media_id, final_score").in("media_id", ids); const grouped = {}; (rows || []).forEach(r => { grouped[r.media_id] ||= []; grouped[r.media_id].push(r.final_score); }); setWorks(data.map(w => ({ ...w, score: grouped[w.id]?.length ? Math.round(grouped[w.id].reduce((a, b) => a + b, 0) / grouped[w.id].length) : null, count: grouped[w.id]?.length || 0 }))); } else setWorks(DEMO_WORKS); };
+  const loadReviews = async () => { const { data } = await supabase.from("reviews").select("*, profiles(nickname,avatar_url)").order("created_at", { ascending: false }).limit(40); setReviews(data || []); };
+  useEffect(() => { let mounted = true; supabase.auth.getSession().then(async ({ data: { session } }) => { if (!mounted) return; setUser(session?.user || null); if (session?.user) await reloadUserData(session.user); await loadWorks(); await loadReviews(); setLoading(false); }); const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => { setUser(session?.user || null); if (session?.user) await reloadUserData(session.user); else { setProfile(null); setRatings([]); setFavorites([]); } }); return () => { mounted = false; sub.subscription.unsubscribe(); }; }, []);
+  const notify = msg => { setNotice(msg); window.setTimeout(() => setNotice(""), 3500); };
+  const afterRating = async () => { await loadWorks(); await loadReviews(); if (user) await reloadUserData(user); notify("Оценка опубликована."); };
+  const handleSignOut = async () => { await supabase.auth.signOut(); setPage("home"); notify("Вы вышли из аккаунта."); };
+  const body = page === "home" ? <Home works={works} setSelected={setSelected} setPage={setPage} /> : page === "work" ? <WorkPage work={selected} user={user} setPage={setPage} onRequireAuth={() => setAuthOpen(true)} onRatingSaved={afterRating} /> : page === "catalog" ? <Catalog works={works} user={user} setSelected={setSelected} setPage={setPage} onAdd={() => setAddOpen(true)} /> : page === "method" ? <MethodPage /> : page === "reviews" ? <ReviewsPage reviews={reviews} /> : <Profile user={user} profile={profile} ratings={ratings} favorites={favorites} setSelected={setSelected} setPage={setPage} onSignOut={handleSignOut} />;
+  return <div className="app"><Header setPage={setPage} user={user} onAuth={() => setAuthOpen(true)} />{loading ? <div className="loading-screen">FRAME<span>99</span></div> : body}<footer><Logo onClick={() => setPage("home")} /><p>Система, в которой у цифры есть причина.</p><span>FRAME99 · 2026</span></footer>{authOpen && <AuthModal onClose={() => setAuthOpen(false)} onSuccess={() => { setAuthOpen(false); setPage("profile"); notify("Добро пожаловать в FRAME99."); }} />}{addOpen && user && <AddMediaModal user={user} onClose={() => setAddOpen(false)} onSaved={async w => { await loadWorks(); setSelected(w); setPage("work"); notify("Произведение добавлено."); }} />}{notice && <div className="notice">{notice}</div>}</div>;
 }
