@@ -53,12 +53,15 @@ function positionPosters(grid, reviewData) {
     if (!review) return;
     card.dataset.frameReviewEnhanced = "1";
     card.dataset.frameReviewId = review.id;
+
     const content = document.createElement("div");
     content.className = "frame-review-content";
     while (card.firstChild) content.appendChild(card.firstChild);
     card.appendChild(content);
 
     const media = review.media;
+    const posterSlot = document.createElement("div");
+    posterSlot.className = "frame-review-poster-slot";
     const poster = document.createElement("button");
     poster.type = "button";
     poster.className = "frame-review-poster";
@@ -73,7 +76,11 @@ function positionPosters(grid, reviewData) {
       const workCard = [...document.querySelectorAll(".work-card")].find(el => el.textContent?.includes(target));
       workCard?.click();
     };
-    card.appendChild(poster);
+    posterSlot.appendChild(poster);
+
+    const reviewText = content.querySelector(".review-card > p, p");
+    if (reviewText) content.insertBefore(posterSlot, reviewText);
+    else content.appendChild(posterSlot);
 
     const author = card.querySelector(".review-top div:nth-child(2) b");
     if (author && !author.dataset.frameAuthorLink) {
@@ -144,7 +151,7 @@ async function enhanceReviews() {
         return;
       }
       const { data: ps } = await supabase.from("profiles").select("id,nickname").in("id", userIds);
-      const names = (userIds.map(id => (ps || []).find(p => p.id === id)?.nickname).filter(Boolean));
+      const names = userIds.map(id => (ps || []).find(p => p.id === id)?.nickname).filter(Boolean);
       tip.innerHTML = `<div>КТО ЛАЙКНУЛ</div>${names.length ? names.map(n => `<span>@${escapeHtml(n)}</span>`).join("") : `<span>Пользователи</span>`}`;
     };
     likeWrap.addEventListener("mouseenter", loadNames);
