@@ -1,4 +1,0 @@
--- Superseded by 20260916_platform_controls.sql.
--- Kept as a compatibility migration so it is safe to apply before the newer migration.
--- The previous deferred trigger implementation was removed because rating and review
--- are now created atomically by public.create_rating_with_review().
