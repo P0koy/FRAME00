@@ -5,6 +5,7 @@ import StableEnhancements from './StableEnhancements.jsx';
 import AdminPosterBridge from './AdminPosterBridge.jsx';
 import { runReviewEnhancements } from './reviewEnhancements.js';
 import './stableFixes.css';
+import './reviewFix.css';
 import './clean.js';
 
 function ReviewEnhancementBridge(){
