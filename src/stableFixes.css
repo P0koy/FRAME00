@@ -1,0 +1,24 @@
+/* Review cards: keep the text on the left and fill the existing right placeholder with the poster. */
+.review-card{position:relative!important;display:block!important;min-height:319px!important;padding:32px!important;overflow:visible!important}
+.frame-review-content{width:100%!important;min-width:0!important;padding-right:205px!important;display:flex!important;flex-direction:column!important;min-height:255px!important}
+.frame-review-poster-slot{position:absolute!important;right:32px!important;top:32px!important;width:170px!important;height:255px!important;min-height:255px!important;margin:0!important;padding:0!important;display:block!important;background:#161616!important;border:1px solid #2b2b2b!important;overflow:hidden!important}
+.frame-review-poster{display:block!important;width:100%!important;height:100%!important;border:0!important;padding:0!important;background:#161616!important}
+.frame-review-poster img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important}
+.frame-review-poster span{display:grid!important;place-items:center!important;width:100%!important;height:100%!important;margin:0!important;font:900 76px/.8 Arial!important;color:#d8ff3e!important}
+.frame-review-like-wrap{position:relative!important;margin-top:auto!important;padding-top:18px!important;display:flex!important;align-items:center!important}
+.frame-review-like{width:48px!important;height:48px!important;padding:0!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:0!important;border:1px solid #3d3d3a!important;background:#111!important;border-radius:14px!important;color:#777!important;cursor:pointer!important;transition:transform .16s ease,border-color .16s ease,color .16s ease,background .16s ease!important}
+.frame-review-like:hover{transform:translateY(-2px)!important;border-color:#777!important;background:#171717!important;color:#aaa!important}
+.frame-review-like.is-liked{background:#d8ff3e!important;border-color:#d8ff3e!important;color:#080808!important;box-shadow:0 0 0 1px rgba(216,255,62,.15),0 8px 22px rgba(0,0,0,.25)!important}
+.frame-like-icon{display:flex!important;width:28px!important;height:28px!important;font-size:0!important;line-height:1!important;transform:none!important}
+.frame-like-icon svg{width:28px!important;height:28px!important;display:block!important}
+.frame-like-count{margin-left:9px!important;min-width:0!important;font-size:12px!important;font-weight:900!important;color:inherit!important}
+.frame-review-like-wrap .frame-like-count{position:relative!important}
+.frame-like-tooltip{left:-6px!important;bottom:56px!important;border:1px solid #40403d!important;background:#111!important;border-radius:10px!important}
+.frame-review-author-link{cursor:pointer!important}
+
+@media(max-width:700px){
+  .review-card{padding:22px!important;min-height:0!important}
+  .frame-review-content{padding-right:0!important;min-height:0!important}
+  .frame-review-poster-slot{position:relative!important;right:auto!important;top:auto!important;width:100%!important;height:260px!important;min-height:260px!important;margin:20px 0 0!important}
+  .frame-review-poster{width:100%!important;height:100%!important}
+}
